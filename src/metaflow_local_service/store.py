@@ -51,7 +51,7 @@ def setup(metaflow_root: str) -> None:
 
         metadir = os.path.realpath(os.path.join(metaflow_root, _METAFLOW_DIR))
         os.makedirs(metadir, exist_ok=True)
-        LocalStorage.datastore_root = metadir
+        LocalStorage.datastore_root = metadir  # type: ignore[assignment]
         _initialized = True
 
 
@@ -215,7 +215,7 @@ def get_or_create_flow(flow_name: str, body: dict[str, Any]) -> tuple[dict[str, 
 
 
 def get_flow(flow_name: str) -> dict[str, Any] | None:
-    return _local().get_object("flow", "self", {}, None, flow_name)
+    return _local().get_object("flow", "self", {}, None, flow_name)  # type: ignore[no-any-return]
 
 
 def create_run(flow_name: str, body: dict[str, Any]) -> dict[str, Any]:
@@ -231,7 +231,7 @@ def create_run(flow_name: str, body: dict[str, Any]) -> dict[str, Any]:
 
 
 def get_run(flow_name: str, run_id: str) -> dict[str, Any] | None:
-    return _local().get_object("run", "self", {}, None, flow_name, run_id)
+    return _local().get_object("run", "self", {}, None, flow_name, run_id)  # type: ignore[no-any-return]
 
 
 def list_runs(flow_name: str) -> list[dict[str, Any]]:
@@ -254,7 +254,7 @@ def get_or_create_step(
 
 
 def get_step(flow_name: str, run_id: str, step_name: str) -> dict[str, Any] | None:
-    return _local().get_object("step", "self", {}, None, flow_name, run_id, step_name)
+    return _local().get_object("step", "self", {}, None, flow_name, run_id, step_name)  # type: ignore[no-any-return]
 
 
 def list_steps(flow_name: str, run_id: str) -> list[dict[str, Any]]:
@@ -277,7 +277,7 @@ def create_task(
 
 
 def get_task(flow_name: str, run_id: str, step_name: str, task_id: str) -> dict[str, Any] | None:
-    return _local().get_object("task", "self", {}, None, flow_name, run_id, step_name, task_id)
+    return _local().get_object("task", "self", {}, None, flow_name, run_id, step_name, task_id)  # type: ignore[no-any-return]
 
 
 def list_tasks(flow_name: str, run_id: str, step_name: str) -> list[dict[str, Any]]:
@@ -357,7 +357,7 @@ def mutate_tags(
     tags_to_remove: list[str],
 ) -> frozenset[str]:
     """Optimistically mutate user tags on a run. Returns the final tag set."""
-    return _local()._mutate_user_tags_for_run(
+    return _local()._mutate_user_tags_for_run(  # type: ignore[no-any-return]
         flow_name, run_id, tags_to_add=tags_to_add, tags_to_remove=tags_to_remove
     )
 
@@ -370,4 +370,4 @@ def filter_tasks_by_metadata(
     pattern: str,
 ) -> list[str]:
     """Return task pathspecs whose metadata matches field_name/pattern."""
-    return _local().filter_tasks_by_metadata(flow_name, run_id, step_name, field_name, pattern)
+    return _local().filter_tasks_by_metadata(flow_name, run_id, step_name, field_name, pattern)  # type: ignore[no-any-return]
