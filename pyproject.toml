@@ -1,0 +1,98 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "metaflow-local-service"
+version = "0.1.0"
+description = "A lightweight, zero-setup Metaflow metadata service that persists to .metaflow/ — starts on demand, stops after idle"
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.9"
+dependencies = [
+    "metaflow>=2.12",
+    "fastapi>=0.100",
+    "uvicorn[standard]>=0.20",
+    "click>=8.0",
+]
+authors = [
+    { name = "npow" },
+]
+keywords = [
+    "metaflow",
+    "metadata",
+    "service",
+    "local",
+    "development",
+    "mlops",
+    "machine-learning",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+
+[project.urls]
+Homepage = "https://github.com/npow/metaflow-local-service"
+Repository = "https://github.com/npow/metaflow-local-service"
+Issues = "https://github.com/npow/metaflow-local-service/issues"
+Documentation = "https://github.com/npow/metaflow-local-service/tree/main/docs"
+
+[project.scripts]
+metaflow-local-service = "metaflow_local_service.cli:cli"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+    "httpx>=0.24",
+    "ruff>=0.8",
+    "mypy>=1.10",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/metaflow_local_service"]
+
+[tool.ruff]
+src = ["src"]
+target-version = "py39"
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+    "E",
+    "W",
+    "F",
+    "I",
+    "B",
+    "UP",
+    "RUF",
+    "SIM",
+    "TCH",
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["metaflow_local_service"]
+force-single-line = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "structural: tests that enforce architectural constraints",
+    "integration: tests that require a running Metaflow environment",
+]
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
