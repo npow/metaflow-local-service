@@ -14,6 +14,7 @@ pattern from LocalMetadataProvider._save_meta().
 
 from __future__ import annotations
 
+import contextlib
 import glob
 import os
 import threading
@@ -87,10 +88,8 @@ def _scan_max_task_id(flow_name: str, run_id: str) -> int:
         parts = path.split(os.sep)
         # task directory is 3 levels up from _self.json: _meta, task, step
         task_dir = parts[-3]
-        try:
+        with contextlib.suppress(ValueError):
             max_id = max(max_id, int(task_dir))
-        except ValueError:
-            pass
     return max_id
 
 
@@ -141,7 +140,7 @@ def _get_username() -> str:
 
 
 def _ts_now() -> int:
-    return int(round(time.time() * 1000))
+    return round(time.time() * 1000)
 
 
 def _build_flow_record(flow_name: str, body: dict[str, Any]) -> dict[str, Any]:
@@ -296,7 +295,7 @@ def register_artifacts(
     """Store a list of artifact records for a task attempt."""
     provider = _local()
     meta_dir = provider._create_and_get_metadir(flow_name, run_id, step_name, task_id)
-    art_dict = {"%s_artifact_%s" % (a.get("attempt_id", 0), a["name"]): a for a in artifacts}
+    art_dict = {"{}_artifact_{}".format(a.get("attempt_id", 0), a["name"]): a for a in artifacts}
     provider._save_meta(meta_dir, art_dict)
 
 
@@ -317,8 +316,8 @@ def get_artifacts(
     meta_dir = provider._get_metadir(flow_name, run_id, step_name, task_id)
     if not os.path.isdir(meta_dir):
         return []
-    prefix = "%d_artifact_" % attempt if attempt is not None else "*_artifact_"
-    pattern = os.path.join(meta_dir, "%s*.json" % prefix)
+    prefix = f"{attempt}_artifact_" if attempt is not None else "*_artifact_"
+    pattern = os.path.join(meta_dir, f"{prefix}*.json")
     result: list[dict[str, Any]] = []
     for path in glob.iglob(pattern):
         obj = provider._read_json_file(path)
@@ -337,10 +336,9 @@ def register_metadata(
     """Store a list of metadata field records for a task."""
     provider = _local()
     meta_dir = provider._create_and_get_metadir(flow_name, run_id, step_name, task_id)
-    ts = int(round(time.time() * 1000))
+    ts = round(time.time() * 1000)
     meta_dict = {
-        "sysmeta_%s_%d" % (m.get("field_name", "unknown"), ts + i): m
-        for i, m in enumerate(metadata)
+        f"sysmeta_{m.get('field_name', 'unknown')}_{ts + i}": m for i, m in enumerate(metadata)
     }
     provider._save_meta(meta_dir, meta_dict)
 

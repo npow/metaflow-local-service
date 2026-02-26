@@ -15,6 +15,7 @@ METAFLOW_LOCAL_SERVICE_IDLE_TIMEOUT.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import signal
@@ -65,7 +66,7 @@ class DaemonState:
         }
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> "DaemonState":
+    def from_dict(cls, d: dict[str, Any]) -> DaemonState:
         return cls(
             pid=int(d["pid"]),
             port=int(d["port"]),
@@ -112,10 +113,8 @@ def _read_state() -> DaemonState | None:
 
 def _clear_state() -> None:
     for path in (_STATE_FILE, _PID_FILE):
-        try:
+        with contextlib.suppress(FileNotFoundError):
             os.remove(path)
-        except FileNotFoundError:
-            pass
 
 
 def _is_alive(pid: int) -> bool:
@@ -221,10 +220,8 @@ def stop() -> bool:
     state = status()
     if state is None:
         return False
-    try:
+    with contextlib.suppress(ProcessLookupError):
         os.kill(state.pid, signal.SIGTERM)
-    except ProcessLookupError:
-        pass
     _clear_state()
     return True
 

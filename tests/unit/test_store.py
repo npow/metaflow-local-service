@@ -7,7 +7,6 @@ from the user's real metadata and from each other.
 from __future__ import annotations
 
 import os
-import tempfile
 
 import pytest
 

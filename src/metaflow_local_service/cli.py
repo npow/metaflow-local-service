@@ -68,7 +68,7 @@ def start(port: int, metaflow_root: str | None, idle_timeout: int) -> None:
     state = _daemon.start(port=port, metaflow_root=metaflow_root, idle_timeout=idle_timeout)
     click.echo(f"Started: pid={state.pid}  url={state.url}")
     click.echo(f"  METAFLOW_SERVICE_URL={state.url}")
-    click.echo(f"  METAFLOW_DEFAULT_METADATA=service")
+    click.echo("  METAFLOW_DEFAULT_METADATA=service")
 
 
 # ---------------------------------------------------------------------------
