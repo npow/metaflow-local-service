@@ -64,7 +64,7 @@ def _get_local_imports(filepath: Path) -> set[str]:
                 # relative import: from .store import ...  → "store"
                 imports.add(node.module.split(".")[0])
             elif node.module and node.module.startswith("metaflow_local_service."):
-                part = node.module[len("metaflow_local_service."):].split(".")[0]
+                part = node.module[len("metaflow_local_service.") :].split(".")[0]
                 imports.add(part)
     return imports
 

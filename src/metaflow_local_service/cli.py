@@ -30,9 +30,7 @@ _DEFAULT_IDLE = _daemon._DEFAULT_IDLE_TIMEOUT
 _DEFAULT_PORT = _daemon._DEFAULT_PORT
 
 
-@click.group(
-    help="Lightweight Metaflow metadata service backed by .metaflow/ on disk."
-)
+@click.group(help="Lightweight Metaflow metadata service backed by .metaflow/ on disk.")
 def cli() -> None:
     pass
 
@@ -67,9 +65,7 @@ def start(port: int, metaflow_root: str | None, idle_timeout: int) -> None:
         click.echo(f"Already running: pid={existing.pid}  url={existing.url}")
         return
 
-    state = _daemon.start(
-        port=port, metaflow_root=metaflow_root, idle_timeout=idle_timeout
-    )
+    state = _daemon.start(port=port, metaflow_root=metaflow_root, idle_timeout=idle_timeout)
     click.echo(f"Started: pid={state.pid}  url={state.url}")
     click.echo(f"  METAFLOW_SERVICE_URL={state.url}")
     click.echo(f"  METAFLOW_DEFAULT_METADATA=service")
@@ -129,9 +125,7 @@ def url() -> None:
 # ---------------------------------------------------------------------------
 
 
-@cli.command(
-    context_settings={"allow_extra_args": True, "ignore_unknown_options": True}
-)
+@cli.command(context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
 @click.argument("cmd", nargs=-1, required=True)
 @click.option(
     "--port",

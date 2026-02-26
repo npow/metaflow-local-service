@@ -170,9 +170,9 @@ class TestTaskRoutes:
 
     def test_get_task(self, client):
         run_id = self._run_id(client)
-        task_id = client.post(
-            f"/flows/MyFlow/runs/{run_id}/steps/start/task", json={}
-        ).json()["task_id"]
+        task_id = client.post(f"/flows/MyFlow/runs/{run_id}/steps/start/task", json={}).json()[
+            "task_id"
+        ]
         resp = client.get(f"/flows/MyFlow/runs/{run_id}/steps/start/tasks/{task_id}")
         assert resp.status_code == 200
 
@@ -202,9 +202,9 @@ class TestHeartbeat:
 
     def test_task_heartbeat(self, client):
         run_id = self._run_id(client)
-        task_id = client.post(
-            f"/flows/MyFlow/runs/{run_id}/steps/start/task", json={}
-        ).json()["task_id"]
+        task_id = client.post(f"/flows/MyFlow/runs/{run_id}/steps/start/task", json={}).json()[
+            "task_id"
+        ]
         resp = client.post(
             f"/flows/MyFlow/runs/{run_id}/steps/start/tasks/{task_id}/heartbeat",
             json={},
@@ -221,9 +221,9 @@ class TestHeartbeat:
 class TestArtifactRoutes:
     def _task_path(self, client) -> tuple[str, str, str]:
         run_id = client.post("/flows/MyFlow/run", json={}).json()["run_number"]
-        task_id = client.post(
-            f"/flows/MyFlow/runs/{run_id}/steps/start/task", json={}
-        ).json()["task_id"]
+        task_id = client.post(f"/flows/MyFlow/runs/{run_id}/steps/start/task", json={}).json()[
+            "task_id"
+        ]
         return run_id, "start", task_id
 
     def test_register_and_list_artifacts(self, client):
@@ -245,9 +245,7 @@ class TestArtifactRoutes:
         )
         assert resp.status_code == 200
 
-        resp = client.get(
-            f"/flows/MyFlow/runs/{run_id}/steps/{step}/tasks/{task_id}/artifacts"
-        )
+        resp = client.get(f"/flows/MyFlow/runs/{run_id}/steps/{step}/tasks/{task_id}/artifacts")
         assert resp.status_code == 200
         assert len(resp.json()) == 1
 
@@ -260,25 +258,21 @@ class TestArtifactRoutes:
 class TestMetadataRoutes:
     def _task_path(self, client) -> tuple[str, str, str]:
         run_id = client.post("/flows/MyFlow/run", json={}).json()["run_number"]
-        task_id = client.post(
-            f"/flows/MyFlow/runs/{run_id}/steps/start/task", json={}
-        ).json()["task_id"]
+        task_id = client.post(f"/flows/MyFlow/runs/{run_id}/steps/start/task", json={}).json()[
+            "task_id"
+        ]
         return run_id, "start", task_id
 
     def test_register_and_get_metadata(self, client):
         run_id, step, task_id = self._task_path(client)
-        entries = [
-            {"field_name": "runtime", "value": "python", "type": "runtime", "tags": []}
-        ]
+        entries = [{"field_name": "runtime", "value": "python", "type": "runtime", "tags": []}]
         resp = client.post(
             f"/flows/MyFlow/runs/{run_id}/steps/{step}/tasks/{task_id}/metadata",
             json=entries,
         )
         assert resp.status_code == 200
 
-        resp = client.get(
-            f"/flows/MyFlow/runs/{run_id}/steps/{step}/tasks/{task_id}/metadata"
-        )
+        resp = client.get(f"/flows/MyFlow/runs/{run_id}/steps/{step}/tasks/{task_id}/metadata")
         assert resp.status_code == 200
         fields = {m["field_name"] for m in resp.json()}
         assert "runtime" in fields
@@ -291,9 +285,7 @@ class TestMetadataRoutes:
 
 class TestTagMutationRoutes:
     def test_add_tags(self, client):
-        run_id = client.post(
-            "/flows/MyFlow/run", json={"tags": ["existing"]}
-        ).json()["run_number"]
+        run_id = client.post("/flows/MyFlow/run", json={"tags": ["existing"]}).json()["run_number"]
 
         resp = client.patch(
             f"/flows/MyFlow/runs/{run_id}/tag/mutate",

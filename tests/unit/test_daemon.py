@@ -21,9 +21,7 @@ def _clean_state(tmp_path, monkeypatch):
     monkeypatch.setattr(
         daemon, "_STATE_FILE", str(tmp_path / ".metaflow-local-service" / "state.json")
     )
-    monkeypatch.setattr(
-        daemon, "_PID_FILE", str(tmp_path / ".metaflow-local-service" / "pid")
-    )
+    monkeypatch.setattr(daemon, "_PID_FILE", str(tmp_path / ".metaflow-local-service" / "pid"))
 
 
 class TestDaemonState:

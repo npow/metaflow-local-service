@@ -34,9 +34,7 @@ _STATE_DIR = os.path.expanduser("~/.metaflow-local-service")
 _STATE_FILE = os.path.join(_STATE_DIR, "state.json")
 _PID_FILE = os.path.join(_STATE_DIR, "pid")
 
-_DEFAULT_IDLE_TIMEOUT = int(
-    os.environ.get("METAFLOW_LOCAL_SERVICE_IDLE_TIMEOUT", "300")
-)
+_DEFAULT_IDLE_TIMEOUT = int(os.environ.get("METAFLOW_LOCAL_SERVICE_IDLE_TIMEOUT", "300"))
 _DEFAULT_PORT = int(os.environ.get("METAFLOW_LOCAL_SERVICE_PORT", "0"))  # 0 = random
 
 

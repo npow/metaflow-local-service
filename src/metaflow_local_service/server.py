@@ -169,9 +169,7 @@ def create_app(metaflow_root: str) -> FastAPI:
         return JSONResponse(store.list_tasks(flow_name, run_id, step_name))
 
     @app.get("/flows/{flow_name}/runs/{run_id}/steps/{step_name}/tasks/{task_id}")
-    async def get_task(
-        flow_name: str, run_id: str, step_name: str, task_id: str
-    ) -> JSONResponse:
+    async def get_task(flow_name: str, run_id: str, step_name: str, task_id: str) -> JSONResponse:
         obj = store.get_task(flow_name, run_id, step_name, task_id)
         if obj is None:
             raise HTTPException(status_code=404, detail="Task not found")
@@ -189,9 +187,7 @@ def create_app(metaflow_root: str) -> FastAPI:
     # Task heartbeat
     # -----------------------------------------------------------------------
 
-    @app.post(
-        "/flows/{flow_name}/runs/{run_id}/steps/{step_name}/tasks/{task_id}/heartbeat"
-    )
+    @app.post("/flows/{flow_name}/runs/{run_id}/steps/{step_name}/tasks/{task_id}/heartbeat")
     async def task_heartbeat(
         flow_name: str, run_id: str, step_name: str, task_id: str
     ) -> JSONResponse:
@@ -203,9 +199,7 @@ def create_app(metaflow_root: str) -> FastAPI:
     # Artifacts
     # -----------------------------------------------------------------------
 
-    @app.post(
-        "/flows/{flow_name}/runs/{run_id}/steps/{step_name}/tasks/{task_id}/artifact"
-    )
+    @app.post("/flows/{flow_name}/runs/{run_id}/steps/{step_name}/tasks/{task_id}/artifact")
     async def register_artifacts(
         flow_name: str, run_id: str, step_name: str, task_id: str, request: Request
     ) -> JSONResponse:
@@ -214,9 +208,7 @@ def create_app(metaflow_root: str) -> FastAPI:
         store.register_artifacts(flow_name, run_id, step_name, task_id, artifacts)
         return JSONResponse({}, status_code=200)
 
-    @app.get(
-        "/flows/{flow_name}/runs/{run_id}/steps/{step_name}/tasks/{task_id}/artifacts"
-    )
+    @app.get("/flows/{flow_name}/runs/{run_id}/steps/{step_name}/tasks/{task_id}/artifacts")
     async def list_artifacts(
         flow_name: str, run_id: str, step_name: str, task_id: str
     ) -> JSONResponse:
@@ -229,17 +221,13 @@ def create_app(metaflow_root: str) -> FastAPI:
     async def list_artifacts_for_attempt(
         flow_name: str, run_id: str, step_name: str, task_id: str, attempt: int
     ) -> JSONResponse:
-        return JSONResponse(
-            store.get_artifacts(flow_name, run_id, step_name, task_id, attempt)
-        )
+        return JSONResponse(store.get_artifacts(flow_name, run_id, step_name, task_id, attempt))
 
     # -----------------------------------------------------------------------
     # Metadata
     # -----------------------------------------------------------------------
 
-    @app.post(
-        "/flows/{flow_name}/runs/{run_id}/steps/{step_name}/tasks/{task_id}/metadata"
-    )
+    @app.post("/flows/{flow_name}/runs/{run_id}/steps/{step_name}/tasks/{task_id}/metadata")
     async def register_metadata(
         flow_name: str, run_id: str, step_name: str, task_id: str, request: Request
     ) -> JSONResponse:
@@ -248,9 +236,7 @@ def create_app(metaflow_root: str) -> FastAPI:
         store.register_metadata(flow_name, run_id, step_name, task_id, entries)
         return JSONResponse({}, status_code=200)
 
-    @app.get(
-        "/flows/{flow_name}/runs/{run_id}/steps/{step_name}/tasks/{task_id}/metadata"
-    )
+    @app.get("/flows/{flow_name}/runs/{run_id}/steps/{step_name}/tasks/{task_id}/metadata")
     async def get_metadata(
         flow_name: str, run_id: str, step_name: str, task_id: str
     ) -> JSONResponse:
@@ -260,9 +246,7 @@ def create_app(metaflow_root: str) -> FastAPI:
     # Filtered tasks
     # -----------------------------------------------------------------------
 
-    @app.get(
-        "/flows/{flow_name}/runs/{run_id}/steps/{step_name}/filtered_tasks"
-    )
+    @app.get("/flows/{flow_name}/runs/{run_id}/steps/{step_name}/filtered_tasks")
     async def filtered_tasks(
         flow_name: str,
         run_id: str,

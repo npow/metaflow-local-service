@@ -130,6 +130,7 @@ def new_run_id() -> str:
 # Object creation helpers
 # ---------------------------------------------------------------------------
 
+
 def _get_username() -> str:
     try:
         from metaflow.util import get_username
@@ -200,6 +201,7 @@ def _build_task_record(
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 def get_or_create_flow(flow_name: str, body: dict[str, Any]) -> tuple[dict[str, Any], bool]:
     """Return (flow_record, created). Created=True if the flow did not exist."""
@@ -275,12 +277,8 @@ def create_task(
     return record
 
 
-def get_task(
-    flow_name: str, run_id: str, step_name: str, task_id: str
-) -> dict[str, Any] | None:
-    return _local().get_object(
-        "task", "self", {}, None, flow_name, run_id, step_name, task_id
-    )
+def get_task(flow_name: str, run_id: str, step_name: str, task_id: str) -> dict[str, Any] | None:
+    return _local().get_object("task", "self", {}, None, flow_name, run_id, step_name, task_id)
 
 
 def list_tasks(flow_name: str, run_id: str, step_name: str) -> list[dict[str, Any]]:
@@ -298,9 +296,7 @@ def register_artifacts(
     """Store a list of artifact records for a task attempt."""
     provider = _local()
     meta_dir = provider._create_and_get_metadir(flow_name, run_id, step_name, task_id)
-    art_dict = {
-        "%s_artifact_%s" % (a.get("attempt_id", 0), a["name"]): a for a in artifacts
-    }
+    art_dict = {"%s_artifact_%s" % (a.get("attempt_id", 0), a["name"]): a for a in artifacts}
     provider._save_meta(meta_dir, art_dict)
 
 
@@ -349,9 +345,7 @@ def register_metadata(
     provider._save_meta(meta_dir, meta_dict)
 
 
-def get_metadata(
-    flow_name: str, run_id: str, step_name: str, task_id: str
-) -> list[dict[str, Any]]:
+def get_metadata(flow_name: str, run_id: str, step_name: str, task_id: str) -> list[dict[str, Any]]:
     result = _local().get_object(
         "task", "metadata", {}, None, flow_name, run_id, step_name, task_id
     )
@@ -378,6 +372,4 @@ def filter_tasks_by_metadata(
     pattern: str,
 ) -> list[str]:
     """Return task pathspecs whose metadata matches field_name/pattern."""
-    return _local().filter_tasks_by_metadata(
-        flow_name, run_id, step_name, field_name, pattern
-    )
+    return _local().filter_tasks_by_metadata(flow_name, run_id, step_name, field_name, pattern)
