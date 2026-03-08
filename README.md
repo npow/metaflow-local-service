@@ -63,6 +63,19 @@ export METAFLOW_DEFAULT_METADATA=service
 python myflow.py run
 ```
 
+## Metaflow UI
+
+The service exposes the full UI API (`/api/flows`, `/api/runs`, `/api/steps`, `/api/tasks`,
+`/api/artifacts`, logs, tags, and heartbeats), so you can point the official Metaflow UI at it:
+
+```bash
+docker run -p 3000:3000 \
+  -e METAFLOW_SERVICE=http://127.0.0.1:<port>/api \
+  netflix/metaflow-ui:latest
+```
+
+The `start` command prints the exact `docker run` line for your port.
+
 ## How it works
 
 The daemon wraps Metaflow's own `LocalMetadataProvider` behind the standard service HTTP API
