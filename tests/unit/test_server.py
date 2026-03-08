@@ -322,9 +322,9 @@ class TestMissing404Routes:
 class TestArtifactsByAttempt:
     def test_list_artifacts_for_attempt(self, client):
         run_id = client.post("/flows/MyFlow/run", json={}).json()["run_number"]
-        task_id = client.post(
-            f"/flows/MyFlow/runs/{run_id}/steps/start/task", json={}
-        ).json()["task_id"]
+        task_id = client.post(f"/flows/MyFlow/runs/{run_id}/steps/start/task", json={}).json()[
+            "task_id"
+        ]
         artifact = {
             "name": "x",
             "attempt_id": 0,
@@ -374,9 +374,9 @@ class TestUIRoutes:
         client.post("/flows/MyFlow", json={})
         run_id = client.post("/flows/MyFlow/run", json={}).json()["run_number"]
         client.post(f"/flows/MyFlow/runs/{run_id}/steps/start/step", json={})
-        task_id = client.post(
-            f"/flows/MyFlow/runs/{run_id}/steps/start/task", json={}
-        ).json()["task_id"]
+        task_id = client.post(f"/flows/MyFlow/runs/{run_id}/steps/start/task", json={}).json()[
+            "task_id"
+        ]
         return run_id, task_id
 
     def test_ui_ping(self, client):
@@ -470,9 +470,7 @@ class TestUIRoutes:
 
     def test_ui_task_attempts(self, client):
         run_id, task_id = self._setup(client)
-        resp = client.get(
-            f"/api/flows/MyFlow/runs/{run_id}/steps/start/tasks/{task_id}/attempts"
-        )
+        resp = client.get(f"/api/flows/MyFlow/runs/{run_id}/steps/start/tasks/{task_id}/attempts")
         assert resp.status_code == 200
         assert isinstance(resp.json()["data"], list)
 
@@ -484,17 +482,13 @@ class TestUIRoutes:
 
     def test_ui_task_metadata(self, client):
         run_id, task_id = self._setup(client)
-        resp = client.get(
-            f"/api/flows/MyFlow/runs/{run_id}/steps/start/tasks/{task_id}/metadata"
-        )
+        resp = client.get(f"/api/flows/MyFlow/runs/{run_id}/steps/start/tasks/{task_id}/metadata")
         assert resp.status_code == 200
         assert "data" in resp.json()
 
     def test_ui_task_artifacts(self, client):
         run_id, task_id = self._setup(client)
-        resp = client.get(
-            f"/api/flows/MyFlow/runs/{run_id}/steps/start/tasks/{task_id}/artifacts"
-        )
+        resp = client.get(f"/api/flows/MyFlow/runs/{run_id}/steps/start/tasks/{task_id}/artifacts")
         assert resp.status_code == 200
         assert "data" in resp.json()
 
@@ -508,24 +502,18 @@ class TestUIRoutes:
 
     def test_ui_task_cards(self, client):
         run_id, task_id = self._setup(client)
-        resp = client.get(
-            f"/api/flows/MyFlow/runs/{run_id}/steps/start/tasks/{task_id}/cards"
-        )
+        resp = client.get(f"/api/flows/MyFlow/runs/{run_id}/steps/start/tasks/{task_id}/cards")
         assert resp.status_code == 200
         assert resp.json()["data"] == []
 
     def test_ui_task_log_out(self, client):
         run_id, task_id = self._setup(client)
-        resp = client.get(
-            f"/api/flows/MyFlow/runs/{run_id}/steps/start/tasks/{task_id}/logs/out"
-        )
+        resp = client.get(f"/api/flows/MyFlow/runs/{run_id}/steps/start/tasks/{task_id}/logs/out")
         assert resp.status_code == 200
 
     def test_ui_task_log_err(self, client):
         run_id, task_id = self._setup(client)
-        resp = client.get(
-            f"/api/flows/MyFlow/runs/{run_id}/steps/start/tasks/{task_id}/logs/err"
-        )
+        resp = client.get(f"/api/flows/MyFlow/runs/{run_id}/steps/start/tasks/{task_id}/logs/err")
         assert resp.status_code == 200
 
     def test_ui_run_parameters(self, client):
