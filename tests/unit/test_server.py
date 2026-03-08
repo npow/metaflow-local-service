@@ -407,7 +407,7 @@ class TestUIRoutes:
         assert "data" in resp.json()
 
     def test_ui_list_runs_for_flow(self, client):
-        run_id, _ = self._setup(client)
+        _, _ = self._setup(client)
         resp = client.get("/api/flows/MyFlow/runs")
         assert resp.status_code == 200
         assert "data" in resp.json()
@@ -452,7 +452,7 @@ class TestUIRoutes:
         assert resp.status_code == 404
 
     def test_ui_list_tasks(self, client):
-        run_id, task_id = self._setup(client)
+        run_id, _ = self._setup(client)
         resp = client.get(f"/api/flows/MyFlow/runs/{run_id}/steps/start/tasks")
         assert resp.status_code == 200
         assert "data" in resp.json()
