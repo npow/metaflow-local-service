@@ -230,13 +230,41 @@ def create_run(flow_name: str, body: dict[str, Any]) -> dict[str, Any]:
     return record
 
 
+def _enrich_run(run: dict[str, Any]) -> dict[str, Any]:
+    """Add status, finished_at, and duration to a run by aggregating task statuses."""
+    flow_name = run["flow_id"]
+    run_id = run["run_number"]
+    tasks = [
+        t for t in list_all_tasks_for_run(flow_name, run_id) if t.get("step_name") != "_parameters"
+    ]
+    if not tasks:
+        return {**run, "status": "running"}
+    statuses = {t.get("status", "running") for t in tasks}
+    if "failed" in statuses:
+        status = "failed"
+    elif "running" in statuses:
+        status = "running"
+    else:
+        status = "completed"
+    enriched: dict[str, Any] = {**run, "status": status}
+    finished_ats = [t["finished_at"] for t in tasks if t.get("finished_at")]
+    started_ats = [t["started_at"] for t in tasks if t.get("started_at")]
+    if finished_ats and status != "running":
+        enriched["finished_at"] = max(finished_ats)
+        ts_start = run.get("ts_epoch") or (min(started_ats) if started_ats else None)
+        if ts_start:
+            enriched["duration"] = enriched["finished_at"] - ts_start
+    return enriched
+
+
 def get_run(flow_name: str, run_id: str) -> dict[str, Any] | None:
-    return _local().get_object("run", "self", {}, None, flow_name, run_id)  # type: ignore[no-any-return]
+    raw = _local().get_object("run", "self", {}, None, flow_name, run_id)
+    return _enrich_run(raw) if raw is not None else None
 
 
 def list_runs(flow_name: str) -> list[dict[str, Any]]:
     result = _local().get_object("flow", "run", {}, None, flow_name)
-    return result if result else []
+    return [_enrich_run(r) for r in result] if result else []
 
 
 def get_or_create_step(
@@ -253,13 +281,40 @@ def get_or_create_step(
     return record, True
 
 
+def _enrich_step(step: dict[str, Any]) -> dict[str, Any]:
+    """Add status and duration by aggregating tasks for this step."""
+    flow_name = step["flow_id"]
+    run_id = step["run_number"]
+    step_name = step["step_name"]
+    tasks = list_tasks(flow_name, run_id, step_name)
+    if not tasks:
+        return {**step, "status": "running"}
+    statuses = {t.get("status", "running") for t in tasks}
+    if "failed" in statuses:
+        status = "failed"
+    elif "running" in statuses:
+        status = "running"
+    else:
+        status = "completed"
+    enriched: dict[str, Any] = {**step, "status": status}
+    finished_ats = [t["finished_at"] for t in tasks if t.get("finished_at")]
+    if finished_ats and status != "running":
+        max_finished = max(finished_ats)
+        ts_start = step.get("ts_epoch")
+        if ts_start:
+            enriched["duration"] = max_finished - ts_start
+        enriched["finished_at"] = max_finished
+    return enriched
+
+
 def get_step(flow_name: str, run_id: str, step_name: str) -> dict[str, Any] | None:
-    return _local().get_object("step", "self", {}, None, flow_name, run_id, step_name)  # type: ignore[no-any-return]
+    raw = _local().get_object("step", "self", {}, None, flow_name, run_id, step_name)
+    return _enrich_step(raw) if raw is not None else None
 
 
 def list_steps(flow_name: str, run_id: str) -> list[dict[str, Any]]:
     result = _local().get_object("run", "step", {}, None, flow_name, run_id)
-    return result if result else []
+    return [_enrich_step(s) for s in result] if result else []
 
 
 def create_task(
@@ -276,13 +331,66 @@ def create_task(
     return record
 
 
+def _enrich_task(task: dict[str, Any]) -> dict[str, Any]:
+    """Add status, attempt_id, started_at, finished_at, duration from on-disk sysmeta."""
+    provider = _local()
+    meta_dir = provider._get_metadir(
+        task["flow_id"], task["run_number"], task["step_name"], task["task_id"]
+    )
+    if not meta_dir:
+        return {**task, "status": "running", "attempt_id": 0}
+
+    # Read all sysmeta files relevant to attempt tracking
+    attempt_start: int | None = None
+    attempt_finish: int | None = None
+    attempt_id: int = 0
+    ok_value: str | None = None
+    has_done = False
+
+    for path in glob.iglob(os.path.join(meta_dir, "sysmeta_attempt*.json")):
+        obj = provider._read_json_file(path)
+        if obj is None:
+            continue
+        field = obj.get("field_name", "")
+        ts = int(obj.get("ts_epoch", 0))
+        if field == "attempt":
+            attempt_id = int(obj.get("value", 0))
+            attempt_start = ts
+        elif field == "attempt_ok":
+            ok_value = str(obj.get("value", ""))
+            attempt_finish = ts
+        elif field == "attempt-done":
+            has_done = True
+
+    if ok_value is not None:
+        status = "completed" if ok_value == "True" else "failed"
+    elif has_done:
+        status = "failed"
+    else:
+        status = "running"
+
+    started_at = attempt_start or task.get("ts_epoch")
+    enriched: dict[str, Any] = {
+        **task,
+        "status": status,
+        "attempt_id": attempt_id,
+        "started_at": started_at,
+    }
+    if attempt_finish is not None:
+        enriched["finished_at"] = attempt_finish
+        if started_at:
+            enriched["duration"] = attempt_finish - started_at
+    return enriched
+
+
 def get_task(flow_name: str, run_id: str, step_name: str, task_id: str) -> dict[str, Any] | None:
-    return _local().get_object("task", "self", {}, None, flow_name, run_id, step_name, task_id)  # type: ignore[no-any-return]
+    raw = _local().get_object("task", "self", {}, None, flow_name, run_id, step_name, task_id)
+    return _enrich_task(raw) if raw is not None else None
 
 
 def list_tasks(flow_name: str, run_id: str, step_name: str) -> list[dict[str, Any]]:
     result = _local().get_object("step", "task", {}, None, flow_name, run_id, step_name)
-    return result if result else []
+    return [_enrich_task(t) for t in result] if result else []
 
 
 def register_artifacts(
@@ -343,11 +451,23 @@ def register_metadata(
     provider._save_meta(meta_dir, meta_dict)
 
 
+def _enrich_metadata(record: dict[str, Any]) -> dict[str, Any]:
+    """Add attempt_id as a direct field extracted from tags (e.g. 'attempt_id:0')."""
+    if "attempt_id" in record:
+        return record
+    attempt_id = 0
+    for tag in record.get("tags") or []:
+        if isinstance(tag, str) and tag.startswith("attempt_id:"):
+            with contextlib.suppress(ValueError):
+                attempt_id = int(tag.split(":", 1)[1])
+    return {**record, "attempt_id": attempt_id}
+
+
 def get_metadata(flow_name: str, run_id: str, step_name: str, task_id: str) -> list[dict[str, Any]]:
     result = _local().get_object(
         "task", "metadata", {}, None, flow_name, run_id, step_name, task_id
     )
-    return result if result else []
+    return [_enrich_metadata(r) for r in result] if result else []
 
 
 def mutate_tags(
@@ -360,6 +480,83 @@ def mutate_tags(
     return _local()._mutate_user_tags_for_run(  # type: ignore[no-any-return]
         flow_name, run_id, tags_to_add=tags_to_add, tags_to_remove=tags_to_remove
     )
+
+
+def list_all_tasks_for_run(flow_name: str, run_id: str) -> list[dict[str, Any]]:
+    """Return all task records across all steps for a run."""
+    result: list[dict[str, Any]] = []
+    for step in list_steps(flow_name, run_id):
+        result.extend(list_tasks(flow_name, run_id, step["step_name"]))
+    result.sort(key=lambda t: t.get("ts_epoch", 0))
+    return result
+
+
+def list_all_flows() -> list[dict[str, Any]]:
+    """Return all flow records stored on disk, sorted by name."""
+    from metaflow.plugins.datastores.local_storage import LocalStorage
+
+    if LocalStorage.datastore_root is None:
+        return []
+    pattern = os.path.join(str(LocalStorage.datastore_root), "*", "_meta", "_self.json")
+    provider = _local()
+    result = []
+    for path in sorted(glob.iglob(pattern)):
+        obj = provider._read_json_file(path)
+        if obj is not None and "flow_id" in obj:
+            result.append(obj)
+    return result
+
+
+def list_all_runs() -> list[dict[str, Any]]:
+    """Return all run records across all flows, newest first."""
+    result: list[dict[str, Any]] = []
+    for flow in list_all_flows():
+        result.extend(list_runs(flow["flow_id"]))
+    result.sort(key=lambda r: r.get("ts_epoch", 0), reverse=True)
+    return result
+
+
+def get_task_logs(
+    flow_name: str,
+    run_id: str,
+    step_name: str,
+    task_id: str,
+    stream: str,
+    attempt: int = 0,
+) -> list[dict[str, Any]]:
+    """Return log lines for a task from the local datastore.
+
+    Reads ``{ds_root}/{flow}/{run}/{step}/{task}/{attempt}.runtime_{stream}.log``
+    and parses the mflog format into ``[{row, timestamp, line}, ...]``.
+    Returns an empty list if the datastore is not local or the file doesn't exist.
+    """
+    meta = get_metadata(flow_name, run_id, step_name, task_id)
+    meta_dict = {m["field_name"]: m["value"] for m in meta}
+    if meta_dict.get("ds-type") != "local":
+        return []
+    ds_root = meta_dict.get("ds-root")
+    if not ds_root:
+        return []
+    fname = f"{attempt}.runtime_{'stdout' if stream == 'out' else 'stderr'}.log"
+    log_path = os.path.join(ds_root, flow_name, run_id, step_name, task_id, fname)
+    if not os.path.isfile(log_path):
+        return []
+    try:
+        from metaflow.mflog.mflog import parse
+    except Exception:
+        return []
+    lines: list[dict[str, Any]] = []
+    with open(log_path, "rb") as f:
+        for raw in f:
+            result = parse(raw)
+            if result is None:
+                continue
+            msg = result.msg
+            if isinstance(msg, bytes):
+                msg = msg.decode("utf-8", errors="replace")
+            ts = int(result.utc_tstamp.timestamp() * 1000) if result.utc_tstamp else 0
+            lines.append({"row": len(lines), "timestamp": ts, "line": msg})
+    return lines
 
 
 def filter_tasks_by_metadata(

@@ -69,6 +69,10 @@ def start(port: int, metaflow_root: str | None, idle_timeout: int) -> None:
     click.echo(f"Started: pid={state.pid}  url={state.url}")
     click.echo(f"  METAFLOW_SERVICE_URL={state.url}")
     click.echo("  METAFLOW_DEFAULT_METADATA=service")
+    click.echo("\nmetaflow-ui (Docker):")
+    click.echo(
+        f"  docker run -p 3000:3000 -e METAFLOW_SERVICE={state.url}/api netflix/metaflow-ui:latest"
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -12,13 +12,17 @@ gets, tag mutation, and filtered-tasks — all supported features).
 
 from __future__ import annotations
 
+import contextlib
 import time
 from typing import Any
 
+from fastapi import APIRouter
 from fastapi import FastAPI
 from fastapi import HTTPException
 from fastapi import Query
 from fastapi import Request
+from fastapi import WebSocket
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.responses import Response
 
@@ -55,6 +59,12 @@ def create_app(metaflow_root: str) -> FastAPI:
     store.setup(metaflow_root)
 
     app = FastAPI(title="metaflow-local-service", version=_SERVICE_VERSION)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
     # -----------------------------------------------------------------------
     # Health / version
@@ -258,6 +268,243 @@ def create_app(metaflow_root: str) -> FastAPI:
             flow_name, run_id, step_name, metadata_field_name, pattern
         )
         return JSONResponse(pathspecs)
+
+    # -----------------------------------------------------------------------
+    # UI-compatible API  (/api/*)
+    # -----------------------------------------------------------------------
+    # Speaks the metaflow-service UI backend protocol so the metaflow-ui Docker
+    # container can be pointed here:
+    #   docker run -p 3000:3000 \
+    #     -e METAFLOW_SERVICE=http://host.docker.internal:<port>/api \
+    #     netflix/metaflow-ui:latest
+    # -----------------------------------------------------------------------
+
+    ui = APIRouter(prefix="/api")
+
+    def _ui_wrap(data: Any, request: Request) -> dict[str, Any]:
+        return {
+            "data": data,
+            "status": 200,
+            "links": {"self": str(request.url), "next": None},
+            "pages": {"self": 1, "first": 1, "prev": None, "next": None},
+            "query": dict(request.query_params),
+        }
+
+    @ui.get("/ping")
+    async def ui_ping() -> JSONResponse:
+        return JSONResponse({"version": _SERVICE_VERSION})
+
+    @ui.get("/flows")
+    async def ui_list_flows(request: Request) -> JSONResponse:
+        return JSONResponse(_ui_wrap(store.list_all_flows(), request))
+
+    @ui.get("/flows/{flow_id}")
+    async def ui_get_flow(flow_id: str, request: Request) -> JSONResponse:
+        obj = store.get_flow(flow_id)
+        if obj is None:
+            raise HTTPException(status_code=404, detail="Flow not found")
+        return JSONResponse(_ui_wrap(obj, request))
+
+    @ui.get("/runs")
+    async def ui_list_all_runs(request: Request) -> JSONResponse:
+        return JSONResponse(_ui_wrap(store.list_all_runs(), request))
+
+    @ui.get("/flows/{flow_id}/runs")
+    async def ui_list_runs(flow_id: str, request: Request) -> JSONResponse:
+        return JSONResponse(_ui_wrap(store.list_runs(flow_id), request))
+
+    @ui.get("/flows/{flow_id}/runs/{run_number}")
+    async def ui_get_run(flow_id: str, run_number: str, request: Request) -> JSONResponse:
+        obj = store.get_run(flow_id, run_number)
+        if obj is None:
+            raise HTTPException(status_code=404, detail="Run not found")
+        return JSONResponse(_ui_wrap(obj, request))
+
+    @ui.get("/flows/{flow_id}/runs/{run_number}/tasks")
+    async def ui_list_all_tasks_for_run(
+        flow_id: str, run_number: str, request: Request
+    ) -> JSONResponse:
+        return JSONResponse(_ui_wrap(store.list_all_tasks_for_run(flow_id, run_number), request))
+
+    @ui.get("/flows/{flow_id}/runs/{run_number}/artifacts")
+    async def ui_run_artifacts(flow_id: str, run_number: str, request: Request) -> JSONResponse:
+        return JSONResponse(_ui_wrap([], request))
+
+    @ui.get("/flows/{flow_id}/runs/{run_number}/steps")
+    async def ui_list_steps(flow_id: str, run_number: str, request: Request) -> JSONResponse:
+        return JSONResponse(_ui_wrap(store.list_steps(flow_id, run_number), request))
+
+    @ui.get("/flows/{flow_id}/runs/{run_number}/steps/{step_name}")
+    async def ui_get_step(
+        flow_id: str, run_number: str, step_name: str, request: Request
+    ) -> JSONResponse:
+        obj = store.get_step(flow_id, run_number, step_name)
+        if obj is None:
+            raise HTTPException(status_code=404, detail="Step not found")
+        return JSONResponse(_ui_wrap(obj, request))
+
+    @ui.get("/flows/{flow_id}/runs/{run_number}/steps/{step_name}/tasks")
+    async def ui_list_tasks(
+        flow_id: str, run_number: str, step_name: str, request: Request
+    ) -> JSONResponse:
+        return JSONResponse(_ui_wrap(store.list_tasks(flow_id, run_number, step_name), request))
+
+    @ui.get("/flows/{flow_id}/runs/{run_number}/steps/{step_name}/tasks/{task_id}")
+    async def ui_get_task(
+        flow_id: str, run_number: str, step_name: str, task_id: str, request: Request
+    ) -> JSONResponse:
+        obj = store.get_task(flow_id, run_number, step_name, task_id)
+        if obj is None:
+            raise HTTPException(status_code=404, detail="Task not found")
+        return JSONResponse(_ui_wrap(obj, request))
+
+    @ui.get("/flows/{flow_id}/runs/{run_number}/steps/{step_name}/tasks/{task_id}/attempts")
+    async def ui_task_attempts(
+        flow_id: str, run_number: str, step_name: str, task_id: str, request: Request
+    ) -> JSONResponse:
+        task = store.get_task(flow_id, run_number, step_name, task_id)
+        if task is None:
+            return JSONResponse(_ui_wrap([], request))
+        attempt = {
+            "flow_id": flow_id,
+            "run_number": run_number,
+            "step_name": step_name,
+            "task_id": task_id,
+            "attempt_id": task.get("attempt_id", 0),
+            "ts_epoch": task.get("ts_epoch", 0),
+            "status": task.get("status", "completed"),
+            "started_at": task.get("started_at"),
+            "finished_at": task.get("finished_at"),
+            "duration": task.get("duration"),
+        }
+        return JSONResponse(_ui_wrap([attempt], request))
+
+    @ui.get("/flows/{flow_id}/runs/{run_number}/steps/{step_name}/tasks/{task_id}/metadata")
+    async def ui_task_metadata(
+        flow_id: str, run_number: str, step_name: str, task_id: str, request: Request
+    ) -> JSONResponse:
+        return JSONResponse(
+            _ui_wrap(store.get_metadata(flow_id, run_number, step_name, task_id), request)
+        )
+
+    @ui.get("/flows/{flow_id}/runs/{run_number}/steps/{step_name}/tasks/{task_id}/artifacts")
+    async def ui_task_artifacts(
+        flow_id: str, run_number: str, step_name: str, task_id: str, request: Request
+    ) -> JSONResponse:
+        attempt_id: int | None = None
+        raw = request.query_params.get("attempt_id")
+        if raw is not None:
+            with contextlib.suppress(ValueError):
+                attempt_id = int(raw)
+        data = store.get_artifacts(flow_id, run_number, step_name, task_id, attempt_id)
+        return JSONResponse(_ui_wrap(data, request))
+
+    @ui.get("/flows/{flow_id}/runs/{run_number}/steps/{step_name}/tasks/{task_id}/cards")
+    async def ui_task_cards(
+        flow_id: str, run_number: str, step_name: str, task_id: str, request: Request
+    ) -> JSONResponse:
+        return JSONResponse(_ui_wrap([], request))
+
+    @ui.get("/flows/{flow_id}/runs/{run_number}/steps/{step_name}/tasks/{task_id}/logs/out")
+    async def ui_task_log_out(
+        flow_id: str, run_number: str, step_name: str, task_id: str, request: Request
+    ) -> JSONResponse:
+        attempt = int(request.query_params.get("attempt_id", 0))
+        logs = store.get_task_logs(flow_id, run_number, step_name, task_id, "out", attempt)
+        return JSONResponse(_ui_wrap(logs, request))
+
+    @ui.get("/flows/{flow_id}/runs/{run_number}/steps/{step_name}/tasks/{task_id}/logs/err")
+    async def ui_task_log_err(
+        flow_id: str, run_number: str, step_name: str, task_id: str, request: Request
+    ) -> JSONResponse:
+        attempt = int(request.query_params.get("attempt_id", 0))
+        logs = store.get_task_logs(flow_id, run_number, step_name, task_id, "err", attempt)
+        return JSONResponse(_ui_wrap(logs, request))
+
+    @ui.get("/flows/{flow_id}/runs/{run_number}/parameters")
+    async def ui_run_parameters(flow_id: str, run_number: str, request: Request) -> JSONResponse:
+        return JSONResponse(_ui_wrap([], request))
+
+    @ui.get("/flows/{flow_id}/runs/{run_number}/metadata")
+    async def ui_run_metadata(flow_id: str, run_number: str, request: Request) -> JSONResponse:
+        return JSONResponse(_ui_wrap([], request))
+
+    @ui.get("/flows/{flow_id}/runs/{run_number}/dag")
+    async def ui_run_dag(flow_id: str, run_number: str, request: Request) -> JSONResponse:
+        all_steps = store.list_steps(flow_id, run_number)
+        # Exclude virtual _parameters step; sort by ts_epoch for linear ordering
+        steps = [s for s in all_steps if s.get("step_name") != "_parameters"]
+        steps.sort(key=lambda s: s.get("ts_epoch", 0))
+        names = [s["step_name"] for s in steps]
+        dag_steps: dict[str, Any] = {}
+        for i, s in enumerate(steps):
+            name = s["step_name"]
+            is_last = i == len(steps) - 1
+            dag_steps[name] = {
+                "name": name,
+                "type": "end" if is_last else "linear",
+                "line": 0,
+                "doc": "",
+                "decorators": [],
+                "next": [] if is_last else [names[i + 1]],
+            }
+        dag = {
+            "file": "",
+            "parameters": [],
+            "constants": [],
+            "steps": dag_steps,
+            "graph_structure": names,
+            "doc": "",
+            "decorators": [],
+            "extensions": {},
+        }
+        return JSONResponse(_ui_wrap(dag, request))
+
+    # Features: raw JSON (not envelope) matching FEATURE_* env var convention
+    @ui.get("/features")
+    async def ui_features() -> JSONResponse:
+        return JSONResponse({})
+
+    # Plugin list: plain array (no envelope) — UI calls .filter() directly on this
+    @ui.get("/plugin")
+    async def ui_plugins() -> JSONResponse:
+        return JSONResponse([])
+
+    # Navigation links: plain array of {href, label}
+    @ui.get("/links")
+    async def ui_links() -> JSONResponse:
+        return JSONResponse([])
+
+    # Version: plain text
+    @ui.get("/version")
+    async def ui_version() -> Response:
+        return Response(content=_SERVICE_VERSION, media_type="text/plain")
+
+    # Notifications: envelope with empty list
+    @ui.get("/notifications")
+    async def ui_notifications(request: Request) -> JSONResponse:
+        return JSONResponse(_ui_wrap([], request))
+
+    # Autocomplete stubs
+    @ui.get("/flows/autocomplete")
+    async def ui_flows_autocomplete(request: Request) -> JSONResponse:
+        return JSONResponse(_ui_wrap([], request))
+
+    @ui.get("/artifacts/autocomplete")
+    async def ui_artifacts_autocomplete(request: Request) -> JSONResponse:
+        return JSONResponse(_ui_wrap([], request))
+
+    app.include_router(ui)
+
+    # WebSocket endpoint — accept and hold open so the UI stops polling
+    @app.websocket("/api/ws")
+    async def ui_ws(websocket: WebSocket) -> None:
+        await websocket.accept()
+        try:
+            while True:
+                await websocket.receive_text()
+        except Exception:
+            pass
 
     return app
 
