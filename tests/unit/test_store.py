@@ -287,3 +287,144 @@ class TestTagMutation:
         final = store.mutate_tags("MyFlow", run_id, [], ["to_remove"])
         assert "to_remove" not in final
         assert "keep" in final
+
+
+# ---------------------------------------------------------------------------
+# list_all_flows / list_all_runs
+# ---------------------------------------------------------------------------
+
+
+class TestListAll:
+    def test_list_all_flows_empty(self):
+        assert store.list_all_flows() == []
+
+    def test_list_all_flows(self):
+        store.get_or_create_flow("FlowA", {})
+        store.get_or_create_flow("FlowB", {})
+        names = {f["flow_id"] for f in store.list_all_flows()}
+        assert {"FlowA", "FlowB"} <= names
+
+    def test_list_all_runs(self):
+        store.get_or_create_flow("FlowA", {})
+        store.create_run("FlowA", {})
+        store.create_run("FlowA", {})
+        runs = store.list_all_runs()
+        assert len(runs) == 2
+
+    def test_list_all_tasks_for_run(self):
+        run_id = store.create_run("MyFlow", {})["run_number"]
+        store.create_task("MyFlow", run_id, "start", {})
+        store.create_task("MyFlow", run_id, "end", {})
+        tasks = store.list_all_tasks_for_run("MyFlow", run_id)
+        assert len(tasks) == 2
+
+
+# ---------------------------------------------------------------------------
+# Task enrichment via sysmeta files
+# ---------------------------------------------------------------------------
+
+
+class TestEnrichTask:
+    def _make_task(self, flow: str = "MyFlow") -> tuple[str, str]:
+        run_id = store.create_run(flow, {})["run_number"]
+        task = store.create_task(flow, run_id, "start", {})
+        return run_id, task["task_id"]
+
+    def _meta_dir(self, flow: str, run_id: str, task_id: str) -> str:
+        import os
+
+        from metaflow.plugins.datastores.local_storage import LocalStorage
+
+        return os.path.join(
+            str(LocalStorage.datastore_root), flow, run_id, "start", task_id, "_meta"
+        )
+
+    def _write_sysmeta(self, meta_dir: str, field_name: str, value: str, ts: int) -> None:
+        import json
+        import os
+
+        fname = f"sysmeta_{field_name}_{ts}.json"
+        with open(os.path.join(meta_dir, fname), "w") as f:
+            json.dump({"field_name": field_name, "value": value, "ts_epoch": ts}, f)
+
+    def test_completed_task(self):
+        run_id, task_id = self._make_task()
+        meta_dir = self._meta_dir("MyFlow", run_id, task_id)
+        ts = 1_000_000
+        self._write_sysmeta(meta_dir, "attempt", "0", ts)
+        self._write_sysmeta(meta_dir, "attempt_ok", "True", ts + 1000)
+
+        enriched = store.get_task("MyFlow", run_id, "start", task_id)
+        assert enriched is not None
+        assert enriched["status"] == "completed"
+        assert enriched["attempt_id"] == 0
+        assert "finished_at" in enriched
+        assert "duration" in enriched
+
+    def test_failed_task_via_attempt_ok_false(self):
+        run_id, task_id = self._make_task()
+        meta_dir = self._meta_dir("MyFlow", run_id, task_id)
+        ts = 1_000_000
+        self._write_sysmeta(meta_dir, "attempt_ok", "False", ts)
+
+        enriched = store.get_task("MyFlow", run_id, "start", task_id)
+        assert enriched is not None
+        assert enriched["status"] == "failed"
+
+    def test_failed_task_via_attempt_done(self):
+        run_id, task_id = self._make_task()
+        meta_dir = self._meta_dir("MyFlow", run_id, task_id)
+        ts = 1_000_000
+        self._write_sysmeta(meta_dir, "attempt-done", "", ts)
+
+        enriched = store.get_task("MyFlow", run_id, "start", task_id)
+        assert enriched is not None
+        assert enriched["status"] == "failed"
+
+    def test_run_status_aggregates_from_tasks(self):
+        run_id, task_id = self._make_task()
+        meta_dir = self._meta_dir("MyFlow", run_id, task_id)
+        ts = 1_000_000
+        self._write_sysmeta(meta_dir, "attempt", "0", ts)
+        self._write_sysmeta(meta_dir, "attempt_ok", "True", ts + 1000)
+
+        run = store.get_run("MyFlow", run_id)
+        assert run is not None
+        assert run["status"] == "completed"
+        assert "finished_at" in run
+
+    def test_run_status_failed_when_task_fails(self):
+        run_id, task_id = self._make_task()
+        meta_dir = self._meta_dir("MyFlow", run_id, task_id)
+        ts = 1_000_000
+        self._write_sysmeta(meta_dir, "attempt_ok", "False", ts)
+
+        run = store.get_run("MyFlow", run_id)
+        assert run is not None
+        assert run["status"] == "failed"
+
+
+# ---------------------------------------------------------------------------
+# get_task_logs
+# ---------------------------------------------------------------------------
+
+
+class TestTaskLogs:
+    def test_returns_empty_without_ds_metadata(self):
+        run_id = store.create_run("MyFlow", {})["run_number"]
+        task = store.create_task("MyFlow", run_id, "start", {})
+        result = store.get_task_logs("MyFlow", run_id, "start", task["task_id"], "out")
+        assert result == []
+
+    def test_returns_empty_when_ds_type_not_local(self):
+        run_id = store.create_run("MyFlow", {})["run_number"]
+        task = store.create_task("MyFlow", run_id, "start", {})
+        store.register_metadata(
+            "MyFlow",
+            run_id,
+            "start",
+            task["task_id"],
+            [{"field_name": "ds-type", "value": "s3", "type": "runtime", "tags": []}],
+        )
+        result = store.get_task_logs("MyFlow", run_id, "start", task["task_id"], "out")
+        assert result == []

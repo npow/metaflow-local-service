@@ -295,3 +295,289 @@ class TestTagMutationRoutes:
         tags = resp.json()["tags"]
         assert "new" in tags
         assert "existing" in tags
+
+
+# ---------------------------------------------------------------------------
+# Missing 404 paths
+# ---------------------------------------------------------------------------
+
+
+class TestMissing404Routes:
+    def test_get_missing_step(self, client):
+        run_id = client.post("/flows/MyFlow/run", json={}).json()["run_number"]
+        resp = client.get(f"/flows/MyFlow/runs/{run_id}/steps/nosuchstep")
+        assert resp.status_code == 404
+
+    def test_get_missing_task(self, client):
+        run_id = client.post("/flows/MyFlow/run", json={}).json()["run_number"]
+        resp = client.get(f"/flows/MyFlow/runs/{run_id}/steps/start/tasks/9999")
+        assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Artifacts by attempt
+# ---------------------------------------------------------------------------
+
+
+class TestArtifactsByAttempt:
+    def test_list_artifacts_for_attempt(self, client):
+        run_id = client.post("/flows/MyFlow/run", json={}).json()["run_number"]
+        task_id = client.post(
+            f"/flows/MyFlow/runs/{run_id}/steps/start/task", json={}
+        ).json()["task_id"]
+        artifact = {
+            "name": "x",
+            "attempt_id": 0,
+            "sha": "abc",
+            "ds_type": "local",
+            "location": "/tmp/x",
+            "content_type": "pickle",
+            "type": "metaflow.artifact",
+        }
+        client.post(
+            f"/flows/MyFlow/runs/{run_id}/steps/start/tasks/{task_id}/artifact",
+            json=[artifact],
+        )
+        resp = client.get(
+            f"/flows/MyFlow/runs/{run_id}/steps/start/tasks/{task_id}/attempt/0/artifacts"
+        )
+        assert resp.status_code == 200
+        assert len(resp.json()) == 1
+
+
+# ---------------------------------------------------------------------------
+# Filtered tasks
+# ---------------------------------------------------------------------------
+
+
+class TestFilteredTasks:
+    def test_filtered_tasks_returns_list(self, client):
+        run_id = client.post("/flows/MyFlow/run", json={}).json()["run_number"]
+        resp = client.get(
+            f"/flows/MyFlow/runs/{run_id}/steps/start/filtered_tasks",
+            params={"metadata_field_name": "runtime", "pattern": ".*"},
+        )
+        assert resp.status_code == 200
+        assert isinstance(resp.json(), list)
+
+
+# ---------------------------------------------------------------------------
+# UI routes  (/api/*)
+# ---------------------------------------------------------------------------
+
+
+class TestUIRoutes:
+    """Covers all /api/* endpoints added for Metaflow UI compatibility."""
+
+    def _setup(self, client) -> tuple[str, str]:
+        """Create flow, run, step, and task. Returns (run_id, task_id)."""
+        client.post("/flows/MyFlow", json={})
+        run_id = client.post("/flows/MyFlow/run", json={}).json()["run_number"]
+        client.post(f"/flows/MyFlow/runs/{run_id}/steps/start/step", json={})
+        task_id = client.post(
+            f"/flows/MyFlow/runs/{run_id}/steps/start/task", json={}
+        ).json()["task_id"]
+        return run_id, task_id
+
+    def test_ui_ping(self, client):
+        resp = client.get("/api/ping")
+        assert resp.status_code == 200
+        assert "version" in resp.json()
+
+    def test_ui_list_flows(self, client):
+        client.post("/flows/MyFlow", json={})
+        resp = client.get("/api/flows")
+        assert resp.status_code == 200
+        assert "data" in resp.json()
+
+    def test_ui_get_flow(self, client):
+        client.post("/flows/MyFlow", json={})
+        resp = client.get("/api/flows/MyFlow")
+        assert resp.status_code == 200
+        assert resp.json()["data"]["flow_id"] == "MyFlow"
+
+    def test_ui_get_flow_not_found(self, client):
+        resp = client.get("/api/flows/NoSuchFlow")
+        assert resp.status_code == 404
+
+    def test_ui_list_all_runs(self, client):
+        self._setup(client)
+        resp = client.get("/api/runs")
+        assert resp.status_code == 200
+        assert "data" in resp.json()
+
+    def test_ui_list_runs_for_flow(self, client):
+        run_id, _ = self._setup(client)
+        resp = client.get("/api/flows/MyFlow/runs")
+        assert resp.status_code == 200
+        assert "data" in resp.json()
+
+    def test_ui_get_run(self, client):
+        run_id, _ = self._setup(client)
+        resp = client.get(f"/api/flows/MyFlow/runs/{run_id}")
+        assert resp.status_code == 200
+        assert resp.json()["data"]["run_number"] == run_id
+
+    def test_ui_get_run_not_found(self, client):
+        resp = client.get("/api/flows/MyFlow/runs/9999999")
+        assert resp.status_code == 404
+
+    def test_ui_list_all_tasks_for_run(self, client):
+        run_id, _ = self._setup(client)
+        resp = client.get(f"/api/flows/MyFlow/runs/{run_id}/tasks")
+        assert resp.status_code == 200
+        assert "data" in resp.json()
+
+    def test_ui_run_artifacts(self, client):
+        run_id, _ = self._setup(client)
+        resp = client.get(f"/api/flows/MyFlow/runs/{run_id}/artifacts")
+        assert resp.status_code == 200
+        assert resp.json()["data"] == []
+
+    def test_ui_list_steps(self, client):
+        run_id, _ = self._setup(client)
+        resp = client.get(f"/api/flows/MyFlow/runs/{run_id}/steps")
+        assert resp.status_code == 200
+        assert "data" in resp.json()
+
+    def test_ui_get_step(self, client):
+        run_id, _ = self._setup(client)
+        resp = client.get(f"/api/flows/MyFlow/runs/{run_id}/steps/start")
+        assert resp.status_code == 200
+        assert resp.json()["data"]["step_name"] == "start"
+
+    def test_ui_get_step_not_found(self, client):
+        run_id, _ = self._setup(client)
+        resp = client.get(f"/api/flows/MyFlow/runs/{run_id}/steps/nosuchstep")
+        assert resp.status_code == 404
+
+    def test_ui_list_tasks(self, client):
+        run_id, task_id = self._setup(client)
+        resp = client.get(f"/api/flows/MyFlow/runs/{run_id}/steps/start/tasks")
+        assert resp.status_code == 200
+        assert "data" in resp.json()
+
+    def test_ui_get_task(self, client):
+        run_id, task_id = self._setup(client)
+        resp = client.get(f"/api/flows/MyFlow/runs/{run_id}/steps/start/tasks/{task_id}")
+        assert resp.status_code == 200
+        assert resp.json()["data"]["task_id"] == task_id
+
+    def test_ui_get_task_not_found(self, client):
+        run_id, _ = self._setup(client)
+        resp = client.get(f"/api/flows/MyFlow/runs/{run_id}/steps/start/tasks/9999")
+        assert resp.status_code == 404
+
+    def test_ui_task_attempts(self, client):
+        run_id, task_id = self._setup(client)
+        resp = client.get(
+            f"/api/flows/MyFlow/runs/{run_id}/steps/start/tasks/{task_id}/attempts"
+        )
+        assert resp.status_code == 200
+        assert isinstance(resp.json()["data"], list)
+
+    def test_ui_task_attempts_missing_task(self, client):
+        run_id, _ = self._setup(client)
+        resp = client.get(f"/api/flows/MyFlow/runs/{run_id}/steps/start/tasks/9999/attempts")
+        assert resp.status_code == 200
+        assert resp.json()["data"] == []
+
+    def test_ui_task_metadata(self, client):
+        run_id, task_id = self._setup(client)
+        resp = client.get(
+            f"/api/flows/MyFlow/runs/{run_id}/steps/start/tasks/{task_id}/metadata"
+        )
+        assert resp.status_code == 200
+        assert "data" in resp.json()
+
+    def test_ui_task_artifacts(self, client):
+        run_id, task_id = self._setup(client)
+        resp = client.get(
+            f"/api/flows/MyFlow/runs/{run_id}/steps/start/tasks/{task_id}/artifacts"
+        )
+        assert resp.status_code == 200
+        assert "data" in resp.json()
+
+    def test_ui_task_artifacts_with_attempt_id(self, client):
+        run_id, task_id = self._setup(client)
+        resp = client.get(
+            f"/api/flows/MyFlow/runs/{run_id}/steps/start/tasks/{task_id}/artifacts",
+            params={"attempt_id": "0"},
+        )
+        assert resp.status_code == 200
+
+    def test_ui_task_cards(self, client):
+        run_id, task_id = self._setup(client)
+        resp = client.get(
+            f"/api/flows/MyFlow/runs/{run_id}/steps/start/tasks/{task_id}/cards"
+        )
+        assert resp.status_code == 200
+        assert resp.json()["data"] == []
+
+    def test_ui_task_log_out(self, client):
+        run_id, task_id = self._setup(client)
+        resp = client.get(
+            f"/api/flows/MyFlow/runs/{run_id}/steps/start/tasks/{task_id}/logs/out"
+        )
+        assert resp.status_code == 200
+
+    def test_ui_task_log_err(self, client):
+        run_id, task_id = self._setup(client)
+        resp = client.get(
+            f"/api/flows/MyFlow/runs/{run_id}/steps/start/tasks/{task_id}/logs/err"
+        )
+        assert resp.status_code == 200
+
+    def test_ui_run_parameters(self, client):
+        run_id, _ = self._setup(client)
+        resp = client.get(f"/api/flows/MyFlow/runs/{run_id}/parameters")
+        assert resp.status_code == 200
+        assert resp.json()["data"] == []
+
+    def test_ui_run_metadata(self, client):
+        run_id, _ = self._setup(client)
+        resp = client.get(f"/api/flows/MyFlow/runs/{run_id}/metadata")
+        assert resp.status_code == 200
+        assert resp.json()["data"] == []
+
+    def test_ui_run_dag(self, client):
+        run_id, _ = self._setup(client)
+        resp = client.get(f"/api/flows/MyFlow/runs/{run_id}/dag")
+        assert resp.status_code == 200
+        dag = resp.json()["data"]
+        assert "steps" in dag
+        assert "graph_structure" in dag
+
+    def test_ui_run_dag_empty(self, client):
+        run_id = client.post("/flows/MyFlow/run", json={}).json()["run_number"]
+        resp = client.get(f"/api/flows/MyFlow/runs/{run_id}/dag")
+        assert resp.status_code == 200
+
+    def test_ui_features(self, client):
+        resp = client.get("/api/features")
+        assert resp.status_code == 200
+        assert resp.json() == {}
+
+    def test_ui_plugins(self, client):
+        resp = client.get("/api/plugin")
+        assert resp.status_code == 200
+        assert resp.json() == []
+
+    def test_ui_links(self, client):
+        resp = client.get("/api/links")
+        assert resp.status_code == 200
+        assert resp.json() == []
+
+    def test_ui_version(self, client):
+        resp = client.get("/api/version")
+        assert resp.status_code == 200
+        assert resp.text == "2.5.0"
+
+    def test_ui_notifications(self, client):
+        resp = client.get("/api/notifications")
+        assert resp.status_code == 200
+        assert resp.json()["data"] == []
+
+    def test_ui_artifacts_autocomplete(self, client):
+        resp = client.get("/api/artifacts/autocomplete")
+        assert resp.status_code == 200
